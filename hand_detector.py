@@ -25,64 +25,13 @@ class HandDetector:
             frame,
             hand_landmarks,
             self.mp_hands.HAND_CONNECTIONS,
-            self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
-            self.mp_draw.DrawingSpec(color=(0, 0, 255), thickness=2)
+            self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=1, circle_radius=1),
+            self.mp_draw.DrawingSpec(color=(0, 0, 255), thickness=1)
         )
-
-    def calculate_distance(self, point1, point2):
-        """Calculate 3D distance between two points."""
-        return ((point1[0] - point2[0])**2 + 
-                (point1[1] - point2[1])**2 + 
-                (point1[2] - point2[2])**2)**0.5
-
-    def get_thumb_positions(self, results):
-        """Get thumb tip positions of both hands."""
-        thumb_positions = {'Left': None, 'Right': None}
-        
-        if results.multi_hand_landmarks:
-            for hand_landmarks, handedness in zip(results.multi_hand_landmarks, 
-                                                results.multi_handedness):
-                hand_type = handedness.classification[0].label
-                thumb_tip = hand_landmarks.landmark[4]  # Thumb tip landmark
-                thumb_positions[hand_type] = (thumb_tip.x, thumb_tip.y, thumb_tip.z)
-        
-        return thumb_positions
-
-    def get_thumb_index_distance(self, hand_landmarks):
-        """Calculate distance between thumb and index finger tips."""
-        thumb_tip = hand_landmarks.landmark[4]  # Thumb tip
-        index_tip = hand_landmarks.landmark[8]  # Index tip
-        
-        thumb_pos = (thumb_tip.x, thumb_tip.y, thumb_tip.z)
-        index_pos = (index_tip.x, index_tip.y, index_tip.z)
-        
-        return self.calculate_distance(thumb_pos, index_pos)
-
-    def count_fingers(self, hand_landmarks, handedness):
-        """Count fingers for a given hand."""
-        finger_count = 0
-        points = [(lm.x, lm.y, lm.z) for lm in hand_landmarks.landmark]
-        
-        # Thumb
-        if handedness == 'Right':
-            if points[4][0] < points[3][0]:
-                finger_count += 1
-        else:
-            if points[4][0] > points[3][0]:
-                finger_count += 1
-        
-        # Other fingers
-        tips = [8, 12, 16, 20]  # Index, middle, ring, pinky tips
-        tips_base = [6, 10, 14, 18]  # Corresponding base joints
-        for tip, base in zip(tips, tips_base):
-            if points[tip][1] < points[base][1]:
-                finger_count += 1
-                
-        return finger_count
 
     def find_right_hand(self, results):
         """Find the right hand landmarks if present."""
-        if not results.multi_hand_landmarks:
+        if results is None or not results.multi_hand_landmarks:
             return None
             
         for hand_landmarks, handedness in zip(results.multi_hand_landmarks,
@@ -100,21 +49,38 @@ class HandDetector:
 
     def check_pinch(self, hand_landmarks):
         """Check if thumb and index finger are pinched."""
+        return self._check_finger_distance(hand_landmarks, 4, 8, 0.05)  # thumb to index
+    
+    def check_zoom_in(self, hand_landmarks):
+        """Check if thumb and middle finger are pinched for zoom in."""
+        return self._check_finger_distance(hand_landmarks, 4, 12, 0.05)  # thumb to middle
+    
+    def check_zoom_out(self, hand_landmarks):
+        """Check if thumb and ring finger are pinched for zoom out."""
+        return self._check_finger_distance(hand_landmarks, 4, 16, 0.05)  # thumb to ring
+        
+    def _check_finger_distance(self, hand_landmarks, finger1_id, finger2_id, threshold):
+        """Calculate distance between two finger tips."""
         if not hand_landmarks:
             return False
             
-        # Using existing get_thumb_index_distance method
-        distance = self.get_thumb_index_distance(hand_landmarks)
-        return distance < 0.05  # Pinch threshold
+        finger1_tip = hand_landmarks.landmark[finger1_id]
+        finger2_tip = hand_landmarks.landmark[finger2_id]
+        
+        # Calculate distance between finger tips
+        distance = ((finger1_tip.x - finger2_tip.x)**2 + 
+                   (finger1_tip.y - finger2_tip.y)**2 + 
+                   (finger1_tip.z - finger2_tip.z)**2)**0.5
+        return distance < threshold
 
     def draw_mouse_pointer(self, frame, x, y):
         """Draw mouse pointer visualization at finger position."""
         h, w = frame.shape[:2]
         cx, cy = int(x * w), int(y * h)
         
-        # Draw crosshair
-        cv2.line(frame, (cx - 10, cy), (cx + 10, cy), (0, 255, 0), 2)
-        cv2.line(frame, (cx, cy - 10), (cx, cy + 10), (0, 255, 0), 2)
+        # Draw smaller crosshair
+        cv2.line(frame, (cx - 5, cy), (cx + 5, cy), (0, 255, 0), 1)
+        cv2.line(frame, (cx, cy - 5), (cx, cy + 5), (0, 255, 0), 1)
     
     def close(self):
         """Close the hands object."""

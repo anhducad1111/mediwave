@@ -3,7 +3,7 @@
 # Exit on error
 set -e
 
-echo "Installing mediwave dependencies for Raspberry Pi OS..."
+echo "Installing mediwave dependencies for Ubuntu..."
 
 # Update package lists
 sudo apt-get update
@@ -16,11 +16,8 @@ sudo apt-get install -y \
     python3-dev \
     libx11-dev \
     libudev-dev \
-    xserver-xorg \
     v4l-utils \
     python3-numpy \
-    python3-picamera2 \
-    python3-libcamera \
     python3-opencv \
     python3-mediapipe \
     python3-venv \
@@ -28,9 +25,9 @@ sudo apt-get install -y \
     python3-tk \
     python3-dev \
     scrot \
-    xlib-dev \
     python3-xlib \
-    libxtst-dev
+    libxtst-dev \
+    python3-wheel
 
 # Enable uinput module
 echo "Enabling uinput module..."
@@ -53,23 +50,25 @@ echo 'SUBSYSTEM=="video4linux", GROUP="video", MODE="0660"' | sudo tee /etc/udev
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
-# Create virtual environment with system packages
+# Create virtual environment
 echo "Setting up Python environment..."
-python3 -m venv --system-site-packages /home/ad/Desktop/WS/venv
+python3 -m venv /home/ad/Desktop/WS/venv
 source /home/ad/Desktop/WS/venv/bin/activate
 
-# Install additional Python packages in venv
+# Install Python packages in venv
 echo "Installing Python packages in virtual environment..."
 pip3 install \
-    python-uinput \
-    pytest \
-    pyautogui
+    opencv-python \
+    mediapipe \
+    numpy \
+    pyautogui \
+    pytest
 
 echo "Installation complete!"
 echo "Please reboot your system for all changes to take effect."
 echo "After reboot, run the program with:"
 echo "source /home/ad/Desktop/WS/venv/bin/activate"
-echo "sudo -E \$(which python3) main.py"
+echo "python3 main.py"
 
 # To run tests:
 echo ""

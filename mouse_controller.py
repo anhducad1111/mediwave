@@ -1,8 +1,6 @@
 import time
 import numpy as np
-import os
-import sys
-import libclicker 
+import pyautogui
 
 class MouseController:
     def __init__(self, smoothing_factor=0.8, screen_w=None, screen_h=None):
@@ -10,33 +8,27 @@ class MouseController:
         self.debug_prefix = "[MouseController]"
         self.hand_lost_threshold = 0.2  # seconds to wait before considering hand truly lost
         self.last_hand_detected_time = time.time()
+        
+        # Zoom gesture cooldown to prevent rapid triggers
+        self.zoom_cooldown = 0.5  # seconds
+        self.last_zoom_time = 0
         try:
-            # Get screen resolution using xrandr if not provided
+            # Get screen resolution from pyautogui if not provided
             if screen_w is None or screen_h is None:
-                import subprocess
-                output = subprocess.check_output(['xrandr']).decode()
-                # Find the primary display's resolution
-                for line in output.split('\n'):
-                    if ' connected primary ' in line:
-                        res = line.split()
-                        for item in res:
-                            if 'x' in item:
-                                screen_w, screen_h = map(int, item.split('x')[0:2])
-                                break
-                        break
+                screen_w, screen_h = pyautogui.size()
                 print(f"Screen resolution detected: {screen_w}x{screen_h}")
             
-            self.screen_w = screen_w or 1920
-            self.screen_h = screen_h or 1080
+            self.screen_w = screen_w
+            self.screen_h = screen_h
             self.smoothing_factor = smoothing_factor
-            self.last_x = screen_w // 2 if screen_w else 960  # Start at screen center
-            self.last_y = screen_h // 2 if screen_h else 540
+            self.last_x = screen_w // 2  # Start at screen center
+            self.last_y = screen_h // 2
             self.is_dragging = False
             self.pinch_start_time = None
             self.is_mouse_down = False
             
-            # Test mouse control
-            libclicker.move_mouse(self.last_x, self.last_y)
+            # Move to center initially
+            pyautogui.moveTo(self.last_x, self.last_y)
             
         except Exception as e:
             print(f"Error initializing mouse control: {str(e)}")
@@ -86,11 +78,7 @@ class MouseController:
             y = int(y)
             if 0 <= x < self.screen_w and 0 <= y < self.screen_h:
                 if abs(x - self.last_x) > 0 or abs(y - self.last_y) > 0:
-                    if self.is_dragging:
-                        print(f"{self.debug_prefix} Dragging to: ({x}, {y})")
-                    else:
-                        print(f"{self.debug_prefix} Moving to: ({x}, {y})")
-                    libclicker.move_mouse(x, y)
+                    pyautogui.moveTo(x, y)
                     self.last_x = x
                     self.last_y = y
         except Exception as e:
@@ -107,34 +95,50 @@ class MouseController:
                     if self.pinch_start_time is None:
                         # Start timing the pinch
                         self.pinch_start_time = current_time
-                        print(f"{self.debug_prefix} Pinch started, timing for potential drag")
                         if not self.is_mouse_down:
-                            print(f"{self.debug_prefix} Mouse button pressed at ({self.last_x}, {self.last_y})")
-                            libclicker.click(self.last_x, self.last_y, btn=0, count=1)
+                            pyautogui.mouseDown()
                             self.is_mouse_down = True
                     elif current_time - self.pinch_start_time >= 0.5:
                         # Convert to drag after 0.5s
-                        print(f"{self.debug_prefix} Converting to drag mode after 0.5s hold")
                         self.is_dragging = True
             else:
                 if self.pinch_start_time is not None:
                     if not self.is_dragging:
                         # Quick pinch and release = click
                         if self.is_mouse_down:
-                            print(f"{self.debug_prefix} Quick pinch release - Click at ({self.last_x}, {self.last_y})")
-                            libclicker.click(self.last_x, self.last_y, btn=0, count=1)
+                            pyautogui.mouseUp()
+                            pyautogui.click()
                             self.is_mouse_down = False
                     else:
                         # End dragging
                         if self.is_mouse_down:
-                            print(f"{self.debug_prefix} Ending drag operation at ({self.last_x}, {self.last_y})")
-                            libclicker.click(self.last_x, self.last_y, btn=0, count=1)
+                            pyautogui.mouseUp()
                             self.is_mouse_down = False
                         self.is_dragging = False
                     self.pinch_start_time = None
         except Exception as e:
             print(f"Error in handle_pinch: {str(e)}")
             self.disable_control()
+    
+    def handle_zoom(self, is_zoom_in, is_zoom_out):
+        """Handle zoom in/out gestures."""
+        try:
+            current_time = time.time()
+            self.last_hand_detected_time = current_time
+            
+            # Check cooldown to prevent rapid zooming
+            if current_time - self.last_zoom_time < self.zoom_cooldown:
+                return
+                
+            if is_zoom_in:
+                pyautogui.hotkey('ctrl', '+')
+                self.last_zoom_time = current_time
+            elif is_zoom_out:
+                pyautogui.hotkey('ctrl', '-')
+                self.last_zoom_time = current_time
+                
+        except Exception as e:
+            print(f"Error in handle_zoom: {str(e)}")
     
     def disable_control(self):
         """Reset control state when hand is not detected."""
@@ -143,12 +147,10 @@ class MouseController:
             # Only reset states if hand has been lost for longer than threshold
             if current_time - self.last_hand_detected_time > self.hand_lost_threshold:
                 if self.is_mouse_down:
-                    print(f"{self.debug_prefix} Hand lost for {self.hand_lost_threshold}s - Releasing mouse button at ({self.last_x}, {self.last_y})")
-                    libclicker.click(self.last_x, self.last_y, btn=0, count=1)
+                    pyautogui.mouseUp()
                     self.is_mouse_down = False
                 if self.is_dragging:
                     self.is_dragging = False
                     self.pinch_start_time = None
-                    print(f"{self.debug_prefix} Control disabled - States reset after threshold")
         except Exception as e:
             print(f"Error in disable_control: {str(e)}")
